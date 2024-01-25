@@ -74,6 +74,9 @@ public:
   // Return if this is appears to be a Pi4
   static bool IsPi4();
 
+  // Return if this is appears to be a Pi5
+  static bool IsPi5();
+
 private:
   inline gpio_bits_t ReadRegisters() const {
     return (static_cast<gpio_bits_t>(*gpio_read_bits_low_)

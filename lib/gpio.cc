@@ -65,6 +65,7 @@
 #define BCM2708_PERI_BASE        0x20000000
 #define BCM2709_PERI_BASE        0x3F000000
 #define BCM2711_PERI_BASE        0xFE000000
+#define BCM2712_PERI_BASE        0x1000000000 // maybe this: 0x107c000000
 
 #define GPIO_REGISTER_OFFSET         0x200000
 #define COUNTER_1Mhz_REGISTER_OFFSET   0x3000
@@ -231,7 +232,8 @@ enum RaspberryPiModel {
   PI_MODEL_1,
   PI_MODEL_2,
   PI_MODEL_3,
-  PI_MODEL_4
+  PI_MODEL_4,
+  PI_MODEL_5
 };
 
 static int ReadFileToBuffer(char *buffer, size_t size, const char *filename) {
@@ -283,6 +285,8 @@ static RaspberryPiModel DetermineRaspberryModel() {
   case 0x13: /* Pi 400 */
   case 0x14: /* CM4 */
     return PI_MODEL_4;
+  case 0x17: /* Pi 5 */
+    return PI_MODEL_5;
 
   default:  /* a bunch of versions representing Pi 3 */
     return PI_MODEL_3;
@@ -305,6 +309,7 @@ static uint32_t *mmap_bcm_register(off_t register_offset) {
   case PI_MODEL_2: base = BCM2709_PERI_BASE; break;
   case PI_MODEL_3: base = BCM2709_PERI_BASE; break;
   case PI_MODEL_4: base = BCM2711_PERI_BASE; break;
+  case PI_MODEL_5: base = BCM2712_PERI_BASE; break;
   }
 
   int mem_fd;
@@ -331,6 +336,8 @@ static uint32_t *mmap_bcm_register(off_t register_offset) {
                      mem_fd,                // File to map
                      base + register_offset // Offset to bcm register
                      );
+  //uint32_t *result = (uint32_t*) mmap(NULL, 16 * 1024 * 1024, PROT_READ|PROT_WRITE, MAP_SHARED, mem_fd, 0x107c000000 );
+
   close(mem_fd);
 
   if (result == MAP_FAILED) {
@@ -390,6 +397,10 @@ bool GPIO::IsPi4() {
   return GetPiModel() == PI_MODEL_4;
 }
 
+bool GPIO::IsPi5() {
+  return GetPiModel() == PI_MODEL_5;
+}
+
 /*
  * We support also other pinouts that don't have the OE- on the hardware
  * PWM output pin, so we need to provide (impefect) 'manual' timing as well.
@@ -442,6 +453,7 @@ static void busy_wait_nanos_rpi_1(long nanos);
 static void busy_wait_nanos_rpi_2(long nanos);
 static void busy_wait_nanos_rpi_3(long nanos);
 static void busy_wait_nanos_rpi_4(long nanos);
+static void busy_wait_nanos_rpi_5(long nanos);
 static void (*busy_wait_impl)(long) = busy_wait_nanos_rpi_3;
 
 // Best effort write to file. Used to set kernel parameters.
@@ -475,6 +487,7 @@ bool Timers::Init() {
   case PI_MODEL_2: busy_wait_impl = busy_wait_nanos_rpi_2; break;
   case PI_MODEL_3: busy_wait_impl = busy_wait_nanos_rpi_3; break;
   case PI_MODEL_4: busy_wait_impl = busy_wait_nanos_rpi_4; break;
+  case PI_MODEL_5: busy_wait_impl = busy_wait_nanos_rpi_5; break;
   }
 
   DisableRealtimeThrottling();
@@ -500,6 +513,8 @@ static uint32_t JitterAllowanceMicroseconds() {
   case PI_MODEL_2: case PI_MODEL_3:
     return EMPIRICAL_NANOSLEEP_OVERHEAD_US + 35;  // 99.999%-ile
   case PI_MODEL_4:
+    return EMPIRICAL_NANOSLEEP_OVERHEAD_US + 10;  // this one is fast.
+  case PI_MODEL_5:
     return EMPIRICAL_NANOSLEEP_OVERHEAD_US + 10;  // this one is fast.
   }
   return EMPIRICAL_NANOSLEEP_OVERHEAD_US;
@@ -570,6 +585,13 @@ static void busy_wait_nanos_rpi_3(long nanos) {
 static void busy_wait_nanos_rpi_4(long nanos) {
   if (nanos < 20) return;
   // Interesting, the Pi4 is _slower_ than the Pi3 ? At least for this busy loop
+  for (uint32_t i = (nanos - 5) * 100 / 132; i != 0; --i) {
+    asm("");
+  }
+}
+
+static void busy_wait_nanos_rpi_5(long nanos) {
+  if (nanos < 20) return;
   for (uint32_t i = (nanos - 5) * 100 / 132; i != 0; --i) {
     asm("");
   }
