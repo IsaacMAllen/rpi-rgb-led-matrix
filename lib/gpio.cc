@@ -330,11 +330,11 @@ static uint32_t *mmap_bcm_register(off_t register_offset) {
 
   uint32_t *result =
     (uint32_t*) mmap(NULL,                  // Any adddress in our space will do
-                     REGISTER_BLOCK_SIZE,   // Map length
+                     64 * 1024 * 1024,   // Map length
                      PROT_READ|PROT_WRITE,  // Enable r/w on GPIO registers.
                      MAP_SHARED,
                      mem_fd,                // File to map
-                     base + register_offset // Offset to bcm register
+                     0x1f00000000 // Offset to bcm register
                      );
   //uint32_t *result = (uint32_t*) mmap(NULL, 16 * 1024 * 1024, PROT_READ|PROT_WRITE, MAP_SHARED, mem_fd, 0x107c000000 );
 
@@ -350,7 +350,7 @@ static uint32_t *mmap_bcm_register(off_t register_offset) {
 }
 
 static bool mmap_all_bcm_registers_once() {
-  if (s_GPIO_registers != NULL) return true;  // alrady done.
+  if (s_GPIO_registers != NULL) return true;  // already done.
 
   // The common GPIO registers.
   s_GPIO_registers = mmap_bcm_register(GPIO_REGISTER_OFFSET);
